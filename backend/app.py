@@ -11,7 +11,7 @@ import os
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
 bcrypt = Bcrypt(app)
 app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
 jwt = JWTManager(app)
@@ -66,18 +66,30 @@ def register():
 
 @app.route("/login", methods=["POST"])
 def login():
-    data = request.get_json()
-    email = data.get("email")
-    password = data.get("password")
+    try:
+        data = request.get_json()
+        email = data.get("email")
+        password = data.get("password")
 
-    # Check if user exists
-    user = users.find_one({"email": email})
-    if not user or not Bcrypt.check_password_hash(user["password"], password):
-        return jsonify({"message": "Invalid email or password"}), 401
-    
-    # Create access token
-    access_token = create_access_token(identity=email)
-    return jsonify(access_token=access_token), 200
+        if not email or not password:
+            return jsonify({"error": "Email and password are required"}), 400
+
+        # Find the user by email
+        user = users.find_one({"email": email})
+        if not user:
+            return jsonify({"error": "Invalid email or password"}), 401
+
+        # Check the password
+        if not bcrypt.check_password_hash(user["password"], password):
+            return jsonify({"error": "Invalid email or password"}), 401
+
+        # Create a JWT token
+        access_token = create_access_token(identity={"email": email})
+
+        return jsonify({"token": access_token}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route("/protected", methods=["GET"])
 @jwt_required()
